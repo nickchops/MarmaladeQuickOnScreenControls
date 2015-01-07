@@ -46,12 +46,16 @@
                         is good for gestures and joypad style.
     - alwaysRelocate    If true, pad base moves to be centred on point touched
                         when finger goes down if anywhere within the
-                        relocateArea. If false and relocateArea is set, pad
+                        relocateArea (or whole screen if relocateArea is nil).
+                        If false and relocateArea is set, pad
                         moves if touch is in relocateArea but not overlapping
                         the base area. If both are false, the pad base is static
-    - relocateArea      Optional area within which touching can cause the whole
-                        pad to re-centre itself. Value is a table of format
+    - relocateArea      NOT YET IMPLEMENTED!
+                        Optional area within which touching can cause the whole
+                        pad to re-centre itself if alwaysRelocate is true.
+                        Value is a table of format
                         {x,y,radius} or {x,y,rectW,rectH} (world coordinates).
+                        Defaults to nil which indicates the whole screen.
     - resetOnRelease    Snap back to 0,0 on release. True by default.
 
     Example:
@@ -98,6 +102,27 @@
     from the following to scale them to work with your game logic:
         http://github.com/nickchops/MarmaladeQuickNodeUtility
         http://github.com/nickchops/MarmaladeQuickVirtualResolution
+        
+    myPad:getTopAsFractionX()
+    myPad:getTopAsFractionY()
+        Use these to get values from -1 -> 0 -> 1 representing position
+        from center of pad to endges. -1 = far left/bottom, 0 = centre,
+        1 = far right/top
+        
+    
+    Setting position and using with a controller/gamepad
+    ----------------------------------------------------
+        
+    myPad:setTopAsFraction(x, y)
+        Use this to set the top x/y position as a fraction from -1 to 1.
+        Setting x or y to nil results in position in that axis not changing.
+        You should use this if you want to have a real controller
+        (eg with s3eAndroidController) moving the pads. In that case, you
+        probably want to not call myPad:activate() as touch vs pad fights might
+        be weird!
+        If you are using setMoveListener(), the listener will be called with
+        screen coords of updated stick positions after this. To avoid that,
+        set the listener to nil.
     
     
     TODO
@@ -274,6 +299,36 @@ function OnScreenDPad:deactivate()
     end
 end
 
+function OnScreenDPad:setTopAsFraction(x, y)
+    local event = {id=-1}
+    if x then
+        self.top.x=self.baseRadius/x
+    end
+    if y then
+        self.top.y=self.baseRadius/y
+    end
+    
+    if self.joystick then
+        self:updateJoystick()
+    end
+    
+    --still allow listener to be sent the on-screen position of the stick
+    --useful if you want that listener to support both touch and controller
+    --via screen coords.
+    if self.moveListener then
+        self.moveListener(self.top.x, self.top.y, event.phase)
+    end
+end
+
+function OnScreenDPad:getTopAsFractionX()
+    return self.top.x/self.baseRadius
+end
+
+
+function OnScreenDPad:getTopAsFractionY()
+    return self.top.y/self.baseRadius
+end
+
 function OnScreenDPad:destroy()
     self:deactivate()
     self.top:removeFromParent()
@@ -302,7 +357,7 @@ function baseTouch(self, event)
         end
         return true
     end
-    
+
     -- node touched
     if event.phase == "ended" then
         self.touched = nil
@@ -315,40 +370,14 @@ function baseTouch(self, event)
     elseif not self.touched then
         return false --ignore moved events not started on the base
     end
-    
+
     --NB: function from NodeUtility to get world coord as event.x/y are in world coords
     local parentX, parentY = getWorldCoords(self.origin)
     self.top.x = event.x - parentX
     self.top.y = event.y - parentY
-    
+
     if self.joystick then
-        if self.top.y ~= 0 then
-            local joyY
-            local stickH
-            local joyScale = 1 - (0.15 / self.baseRadius * self.top.y)
-            if self.top.y < 0 then
-                joyY = self.topRadius*2 + (0.64*self.topRadius / self.baseRadius * self.top.y)
-            else
-                joyY = self.topRadius*2 + (0.32*self.topRadius / self.baseRadius * self.top.y)
-            end
-            if self.top.y > self.baseRadius /2 then
-                self.joystick.ball.zOrder = -1
-                stickH = joyY - self.topRadius * joyScale * (1 - (0.1 / self.baseRadius * self.top.y))
-                self.joystick.sticktop.yScale = 0.3 * (self.top.y*2-self.baseRadius)/self.baseRadius
-            else
-                self.joystick.ball.zOrder = 1
-                stickH = joyY
-            end
-            self.joystick.ball.y = joyY
-            self.joystick.stick.h = stickH
-            self.joystick.sticktop.y = stickH
-            self.joystick.ball.xScale = joyScale
-            self.joystick.ball.yScale = joyScale
-        end
-        if self.top.x ~= 0 then
-            self.joystick.rotation = 45 / self.baseRadius * self.top.x
-            self.joystick.ball.rotation = -self.joystick.rotation --keep highlights on "top"
-        end
+        self:updateJoystick()
     end
     
     if self.moveListener then
@@ -360,6 +389,37 @@ function baseTouch(self, event)
     end
     
     return true
+end
+
+
+function OnScreenDPad:updateJoystick()
+    if self.top.y ~= 0 then
+        local joyY
+        local stickH
+        local joyScale = 1 - (0.15 / self.baseRadius * self.top.y)
+        if self.top.y < 0 then
+            joyY = self.topRadius*2 + (0.64*self.topRadius / self.baseRadius * self.top.y)
+        else
+            joyY = self.topRadius*2 + (0.32*self.topRadius / self.baseRadius * self.top.y)
+        end
+        if self.top.y > self.baseRadius /2 then
+            self.joystick.ball.zOrder = -1
+            stickH = joyY - self.topRadius * joyScale * (1 - (0.1 / self.baseRadius * self.top.y))
+            self.joystick.sticktop.yScale = 0.3 * (self.top.y*2-self.baseRadius)/self.baseRadius
+        else
+            self.joystick.ball.zOrder = 1
+            stickH = joyY
+        end
+        self.joystick.ball.y = joyY
+        self.joystick.stick.h = stickH
+        self.joystick.sticktop.y = stickH
+        self.joystick.ball.xScale = joyScale
+        self.joystick.ball.yScale = joyScale
+    end
+    if self.top.x ~= 0 then
+        self.joystick.rotation = 45 / self.baseRadius * self.top.x
+        self.joystick.ball.rotation = -self.joystick.rotation --keep highlights on "top"
+    end
 end
 
 function OnScreenDPad:reset()
