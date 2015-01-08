@@ -1,5 +1,4 @@
 
-
  --[[
     (C) Nick Smith 2013-2014
     On-screen button visual control for Marmalade Quick
@@ -185,7 +184,26 @@ function buttonTouch(self, event)
     return true
 end
 
+function OnScreenButton:pressButton()
+    local alreadyTouched = self.touched
+    self.touched = -1 --now button wont be released by other touch events
+    
+    if not alreadyTouched then
+        self.top.y=self.top.y-self.depth3d
+        self.mid.h=0
+        if self.pressListener then
+            self.pressListener(true)
+        end
+    end
+    if self.autoRelease then
+        self.releaseTimer = system:addTimer(self, self.autoRelease, 1) --use "timer" func
+    end
+end
+
 function OnScreenButton:releaseButton()
+    if not self.touched then
+        return
+    end
     if self.releaseTimer then
         self.releaseTimer:cancel()
         self.releaseTimer = nil
@@ -196,6 +214,14 @@ function OnScreenButton:releaseButton()
         self.pressListener(false) --pass last on-pad coords
     end
     self.touched = nil --reset after listener so released finger id could be checked during that
+end
+
+function OnScreenButton:setState(pressed)
+    if pressed then
+        self:pressButton()
+    else
+        self:releaseButton()
+    end
 end
 
 function OnScreenButton:timer()

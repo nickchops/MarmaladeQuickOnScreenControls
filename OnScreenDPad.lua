@@ -137,9 +137,6 @@
     
 ]]--
 
-
-require("Utility")
-
 OnScreenDPad = {}
 OnScreenDPad.__index = OnScreenDPad
 
@@ -300,12 +297,11 @@ function OnScreenDPad:deactivate()
 end
 
 function OnScreenDPad:setTopAsFraction(x, y)
-    local event = {id=-1}
     if x then
-        self.top.x=self.baseRadius/x
+        self.top.x=x*self.baseRadius
     end
     if y then
-        self.top.y=self.baseRadius/y
+        self.top.y=y*self.baseRadius
     end
     
     if self.joystick then
